@@ -254,23 +254,14 @@ impl NextArtView {
                     .padding(30),
                 ),
                 if let Some(selected_index) = selected_index {
-                    column![
-                        text(&state.index.roms.get(*selected_index).unwrap().name)
-                            .font(Font {
-                                weight: Weight::Bold,
-                                ..Default::default()
-                            })
-                            .size(32),
-                        image(&state.index.roms.get(*selected_index).unwrap().boxart_path)
-                            .width(Length::Fill)
-                    ]
-                    .align_x(Alignment::Center)
+                    Self::rom_info_column(state.index.roms.get(*selected_index).unwrap())
                 } else {
                     column![
                         text("No rom selected")
                             .width(Length::Fill)
                             .align_x(Horizontal::Center)
                     ]
+                    .into()
                 }
             ]
             .padding(20)
@@ -369,6 +360,43 @@ impl NextArtView {
         }
 
         Task::none()
+    }
+
+    fn rom_info_column(rom: &Rom) -> Element<Message> {
+        column![
+            text(&rom.name)
+                .font(Font {
+                    weight: Weight::Bold,
+                    ..Default::default()
+                })
+                .size(32),
+            if rom.boxart_size == 0 {
+                Element::from(text("No image").font(Font {
+                    weight: Weight::Light,
+                    ..Default::default()
+                }))
+            } else {
+                Element::from(
+                    column![
+                        image(&rom.boxart_path),
+                        row![
+                            button("Copy Path"),
+                            button("Copy Image"),
+                            button("Choose Image"),
+                            button("Paste Image"),
+                            button("Compress Image")
+                        ]
+                        .spacing(5)
+                    ]
+                    .width(Length::Fill)
+                    .align_x(Alignment::Center)
+                    .spacing(10),
+                )
+            }
+        ]
+        .align_x(Alignment::Center)
+        .width(Length::Fill)
+        .into()
     }
 }
 
