@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arboard = { version = "3.5.0", features = ["wayland-data-control"] }
 bittenhumans = "1.0.0"
 iced = { version = "0.13.1", features = ["image", "tokio"] }
 image = "0.25.6"

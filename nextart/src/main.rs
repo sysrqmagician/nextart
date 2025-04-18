@@ -1,5 +1,7 @@
 use std::{fs::DirEntry, os::unix::fs::MetadataExt, path::PathBuf};
 
+use ::image::{ImageDecoder, ImageReader, RgbaImage};
+use arboard::{Clipboard, ImageData};
 use bittenhumans::ByteSizeFormatter;
 use iced::{
     Alignment, Element, Font, Length, Task,
@@ -40,7 +42,9 @@ enum Message {
     CompletedIndexing(NextArt),
     DirectoryChosen(PathBuf),
     SetupDone(PathBuf),
-    CopyToClipboard(String),
+    SetClipboardText(String),
+    SetClipboardImage(PathBuf),
+    ReplacementImageFromClip(PathBuf, usize),
     ViewError(String),
     RecordError(String),
     NewImageSize(usize, u64),
@@ -310,7 +314,7 @@ impl NextArtView {
                 row![
                     button("Restart").on_press(Message::ResetState),
                     Space::with_width(Length::Fill),
-                    button("Copy").on_press(Message::CopyToClipboard(error_description.clone()))
+                    button("Copy").on_press(Message::SetClipboardText(error_description.clone()))
                 ]
             ]
             .spacing(20)
@@ -322,6 +326,58 @@ impl NextArtView {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::NoOp => {}
+
+            Message::ReplacementImageFromClip(boxart_path, rom_index) => {
+                return Task::perform(
+                    async move {
+                        let mut clip = Clipboard::new().map_err(|e| e.to_string())?;
+                        let image = clip.get_image().map_err(|e| e.to_string())?;
+                        let rgba_image = RgbaImage::from_vec(
+                            image.width as u32,
+                            image.height as u32,
+                            image.bytes.to_vec(),
+                        )
+                        .ok_or_else(|| "Failed to create image from clipboard data".to_string())?;
+                        rgba_image
+                            .save_with_format(&boxart_path, ::image::ImageFormat::Png)
+                            .map_err(|e| e.to_string())?;
+
+                        std::fs::metadata(&boxart_path)
+                            .map_err(|e| e.to_string())
+                            .map(|m| m.size())
+                    },
+                    move |result| match result {
+                        Ok(size) => Message::NewImageSize(rom_index, size),
+                        Err(e) => Message::RecordError(e),
+                    },
+                );
+            }
+
+            Message::SetClipboardImage(image_path) => {
+                return Task::perform(
+                    async move {
+                        let img = ImageReader::open(image_path)
+                            .map_err(|x| x.to_string())?
+                            .decode()
+                            .map_err(|x| x.to_string())?;
+                        let mut clip = Clipboard::new().map_err(|x| x.to_string())?;
+                        let img_data = ImageData {
+                            width: img.width() as usize,
+                            height: img.height() as usize,
+                            bytes: img.as_bytes().into(),
+                        };
+
+                        clip.set_image(img_data).map_err(|x| x.to_string())
+                    },
+                    |x: Result<(), String>| {
+                        if let Err(e) = x {
+                            Message::RecordError(e)
+                        } else {
+                            Message::NoOp
+                        }
+                    },
+                );
+            }
 
             Message::NewImageSize(rom_index, size) => {
                 if let NextArtView::RomList { state, .. } = self {
@@ -355,7 +411,7 @@ impl NextArtView {
                 *self = NextArtView::FatalError { error_description };
             }
 
-            Message::CopyToClipboard(value) => {
+            Message::SetClipboardText(value) => {
                 return clipboard::write(value);
             }
 
@@ -459,14 +515,17 @@ impl NextArtView {
                         ..Default::default()
                     }),
                     row![
-                        button("Copy Path").on_press(Message::CopyToClipboard(
+                        button("Copy Path").on_press(Message::SetClipboardText(
                             rom.boxart_path.to_string_lossy().into()
                         )),
                         button("Choose Image").on_press(Message::ChooseReplacementImage(
                             rom.boxart_path.clone(),
                             rom_index
                         )),
-                        button("Paste Image"),
+                        button("Paste Image").on_press(Message::ReplacementImageFromClip(
+                            rom.boxart_path.clone(),
+                            rom_index
+                        )),
                     ]
                     .spacing(5)
                 ]
@@ -477,15 +536,19 @@ impl NextArtView {
                 column![
                     image(&rom.boxart_path),
                     row![
-                        button("Copy Path").on_press(Message::CopyToClipboard(
+                        button("Copy Path").on_press(Message::SetClipboardText(
                             rom.boxart_path.to_string_lossy().into()
                         )),
                         button("Choose Image").on_press(Message::ChooseReplacementImage(
                             rom.boxart_path.clone(),
                             rom_index
                         )),
-                        button("Copy Image"),
-                        button("Paste Image"),
+                        button("Copy Image")
+                            .on_press(Message::SetClipboardImage(rom.boxart_path.clone())),
+                        button("Paste Image").on_press(Message::ReplacementImageFromClip(
+                            rom.boxart_path.clone(),
+                            rom_index
+                        )),
                     ]
                     .spacing(5)
                 ]
