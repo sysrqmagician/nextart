@@ -502,64 +502,66 @@ impl NextArtView {
     }
 
     fn rom_info_column(rom: &Rom, rom_index: usize) -> Element<Message> {
-        column![
-            text(&rom.name)
-                .font(Font {
-                    weight: Weight::Bold,
-                    ..Default::default()
-                })
-                .size(32),
-            if rom.boxart_size == 0 {
-                column![
-                    text("No image").font(Font {
-                        weight: Weight::Light,
+        scrollable(
+            column![
+                text(&rom.name)
+                    .font(Font {
+                        weight: Weight::Bold,
                         ..Default::default()
-                    }),
-                    row![
-                        button("Copy Path").on_press(Message::SetClipboardText(
-                            rom.boxart_path.to_string_lossy().into()
-                        )),
-                        button("Choose Image").on_press(Message::ChooseReplacementImage(
-                            rom.boxart_path.clone(),
-                            rom_index
-                        )),
-                        button("Paste Image").on_press(Message::ReplacementImageFromClip(
-                            rom.boxart_path.clone(),
-                            rom_index
-                        )),
+                    })
+                    .size(32),
+                if rom.boxart_size == 0 {
+                    column![
+                        text("No image").font(Font {
+                            weight: Weight::Light,
+                            ..Default::default()
+                        }),
+                        row![
+                            button("Copy Path").on_press(Message::SetClipboardText(
+                                rom.boxart_path.to_string_lossy().into()
+                            )),
+                            button("Choose Image").on_press(Message::ChooseReplacementImage(
+                                rom.boxart_path.clone(),
+                                rom_index
+                            )),
+                            button("Paste Image").on_press(Message::ReplacementImageFromClip(
+                                rom.boxart_path.clone(),
+                                rom_index
+                            )),
+                        ]
+                        .spacing(5)
                     ]
-                    .spacing(5)
-                ]
-                .width(Length::Fill)
-                .align_x(Alignment::Center)
-                .spacing(10)
-            } else {
-                column![
-                    image(&rom.boxart_path),
-                    row![
-                        button("Copy Path").on_press(Message::SetClipboardText(
-                            rom.boxart_path.to_string_lossy().into()
-                        )),
-                        button("Choose Image").on_press(Message::ChooseReplacementImage(
-                            rom.boxart_path.clone(),
-                            rom_index
-                        )),
-                        button("Copy Image")
-                            .on_press(Message::SetClipboardImage(rom.boxart_path.clone())),
-                        button("Paste Image").on_press(Message::ReplacementImageFromClip(
-                            rom.boxart_path.clone(),
-                            rom_index
-                        )),
+                    .width(Length::Fill)
+                    .align_x(Alignment::Center)
+                    .spacing(10)
+                } else {
+                    column![
+                        image(&rom.boxart_path),
+                        row![
+                            button("Copy Path").on_press(Message::SetClipboardText(
+                                rom.boxart_path.to_string_lossy().into()
+                            )),
+                            button("Choose Image").on_press(Message::ChooseReplacementImage(
+                                rom.boxart_path.clone(),
+                                rom_index
+                            )),
+                            button("Copy Image")
+                                .on_press(Message::SetClipboardImage(rom.boxart_path.clone())),
+                            button("Paste Image").on_press(Message::ReplacementImageFromClip(
+                                rom.boxart_path.clone(),
+                                rom_index
+                            )),
+                        ]
+                        .spacing(5)
                     ]
-                    .spacing(5)
-                ]
-                .width(Length::Fill)
-                .align_x(Alignment::Center)
-                .spacing(10)
-            }
-        ]
-        .align_x(Alignment::Center)
-        .width(Length::Fill)
+                    .width(Length::Fill)
+                    .align_x(Alignment::Center)
+                    .spacing(10)
+                }
+            ]
+            .align_x(Alignment::Center)
+            .width(Length::Fill),
+        )
         .into()
     }
 }
