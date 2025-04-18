@@ -242,7 +242,8 @@ impl NextArtView {
                 state,
                 selected_index,
                 rom_indices,
-            } => {
+            } => column![
+                button("Back").on_press(Message::OpenCollectionList(state.clone())),
                 row![
                     scrollable(
                         column(
@@ -300,8 +301,8 @@ impl NextArtView {
                     }
                 ]
                 .padding(20)
-                .into()
-            }
+            ]
+            .into(),
 
             Self::ErrorList { state } => column![
                 text("Errors"),
