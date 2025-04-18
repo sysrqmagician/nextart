@@ -1,6 +1,6 @@
-use std::{fs::DirEntry, os::unix::fs::MetadataExt, path::PathBuf};
+use std::{fs::DirEntry, io::Read, path::PathBuf};
 
-use ::image::{ImageDecoder, ImageReader, RgbaImage};
+use ::image::{EncodableLayout, ImageDecoder, ImageReader, RgbaImage};
 use arboard::{Clipboard, ImageData};
 use bittenhumans::ByteSizeFormatter;
 use iced::{
@@ -121,7 +121,7 @@ impl NextArt {
 
                 if std::fs::exists(&boxart_path)? {
                     if let Ok(metadata) = std::fs::metadata(&boxart_path) {
-                        rom.boxart_size = metadata.size();
+                        rom.boxart_size = metadata.len();
                     }
                 }
 
@@ -344,7 +344,7 @@ impl NextArtView {
 
                         std::fs::metadata(&boxart_path)
                             .map_err(|e| e.to_string())
-                            .map(|m| m.size())
+                            .map(|m| m.len())
                     },
                     move |result| match result {
                         Ok(size) => Message::NewImageSize(rom_index, size),
@@ -359,7 +359,8 @@ impl NextArtView {
                         let img = ImageReader::open(image_path)
                             .map_err(|x| x.to_string())?
                             .decode()
-                            .map_err(|x| x.to_string())?;
+                            .map_err(|x| x.to_string())?
+                            .into_rgba8();
                         let mut clip = Clipboard::new().map_err(|x| x.to_string())?;
                         let img_data = ImageData {
                             width: img.width() as usize,
