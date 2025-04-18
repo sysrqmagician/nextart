@@ -34,7 +34,7 @@ struct Collection {
 #[derive(Debug, Clone)]
 enum Message {
     NoOp,
-    OpenPicker,
+    OpenDirectoryPicker,
     OpenRomList(NextArt, Vec<usize>),
     SelectRom(usize),
     CompletedIndexing(NextArt),
@@ -42,6 +42,9 @@ enum Message {
     SetupDone(PathBuf),
     CopyToClipboard(String),
     ViewError(String),
+    RecordError(String),
+    NewImageSize(usize, u64),
+    ChooseReplacementImage(PathBuf, usize),
     ResetState,
 }
 
@@ -146,8 +149,11 @@ enum NextArtView {
         selected_index: Option<usize>,
         rom_indices: Vec<usize>,
     },
-    Error {
+    FatalError {
         error_description: String,
+    },
+    ErrorList {
+        state: NextArt,
     },
 }
 
@@ -176,7 +182,7 @@ impl NextArtView {
                     .width(Length::Fill),
                     button("Pick")
                         .padding([5, 10])
-                        .on_press(Message::OpenPicker),
+                        .on_press(Message::OpenDirectoryPicker),
                 ]
                 .spacing(10),
                 row![
@@ -276,6 +282,7 @@ impl NextArtView {
                             state.index.roms.get(*selected_index).expect(
                                 "This should not be reachable! selected_index did not exist!",
                             ),
+                            *selected_index,
                         )
                     } else {
                         column![
@@ -290,7 +297,9 @@ impl NextArtView {
                 .into()
             }
 
-            Self::Error { error_description } => column![
+            Self::ErrorList { state } => todo!(),
+
+            Self::FatalError { error_description } => column![
                 text(strings::UI_TITLE_ERROR).font(Font {
                     weight: Weight::Bold,
                     ..Default::default()
@@ -299,7 +308,7 @@ impl NextArtView {
                     color: Some(theme.palette().text.scale_alpha(0.5))
                 }),
                 row![
-                    button("Retry").on_press(Message::ResetState),
+                    button("Restart").on_press(Message::ResetState),
                     Space::with_width(Length::Fill),
                     button("Copy").on_press(Message::CopyToClipboard(error_description.clone()))
                 ]
@@ -314,6 +323,12 @@ impl NextArtView {
         match message {
             Message::NoOp => {}
 
+            Message::NewImageSize(rom_index, size) => {
+                if let NextArtView::RomList { state, .. } = self {
+                    state.index.roms[rom_index].boxart_size = size;
+                }
+            }
+
             Message::ResetState => {
                 *self = NextArtView::Setup { chosen_path: None };
             }
@@ -326,15 +341,50 @@ impl NextArtView {
                 };
             }
 
+            Message::RecordError(error_description) => {
+                if let NextArtView::RomList { state, .. } = self {
+                    state.errors.push(error_description);
+                } else if let NextArtView::Loading { state, .. } = self {
+                    state.errors.push(error_description);
+                } else if let NextArtView::CollectionList { state } = self {
+                    state.errors.push(error_description);
+                }
+            }
+
             Message::ViewError(error_description) => {
-                *self = NextArtView::Error { error_description };
+                *self = NextArtView::FatalError { error_description };
             }
 
             Message::CopyToClipboard(value) => {
                 return clipboard::write(value);
             }
 
-            Message::OpenPicker => {
+            Message::ChooseReplacementImage(path, rom_index) => {
+                return Task::perform(
+                    async move {
+                        let dialog = FileDialog::new().add_filter("PNG", &["png"]);
+                        if let Some(picked) = dialog.pick_file() {
+                            let written = std::fs::copy(&picked, &path);
+                            if let Ok(written) = written {
+                                return Ok(written);
+                            } else {
+                                return Err(format!(
+                                    "Failed to copy file: {}",
+                                    written.unwrap_err()
+                                ));
+                            }
+                        } else {
+                            return Err("No file selected".into());
+                        }
+                    },
+                    move |x| match x {
+                        Ok(x) => Message::NewImageSize(rom_index, x),
+                        Err(e) => Message::RecordError(e.to_string()),
+                    },
+                );
+            }
+
+            Message::OpenDirectoryPicker => {
                 return Task::perform(
                     async move {
                         let dialog = FileDialog::new();
@@ -394,7 +444,7 @@ impl NextArtView {
         Task::none()
     }
 
-    fn rom_info_column(rom: &Rom) -> Element<Message> {
+    fn rom_info_column(rom: &Rom, rom_index: usize) -> Element<Message> {
         column![
             text(&rom.name)
                 .font(Font {
@@ -403,27 +453,45 @@ impl NextArtView {
                 })
                 .size(32),
             if rom.boxart_size == 0 {
-                Element::from(text("No image").font(Font {
-                    weight: Weight::Light,
-                    ..Default::default()
-                }))
-            } else {
-                Element::from(
-                    column![
-                        image(&rom.boxart_path),
-                        row![
-                            button("Copy Path"),
-                            button("Copy Image"),
-                            button("Choose Image"),
-                            button("Paste Image"),
-                            button("Compress Image")
-                        ]
-                        .spacing(5)
+                column![
+                    text("No image").font(Font {
+                        weight: Weight::Light,
+                        ..Default::default()
+                    }),
+                    row![
+                        button("Copy Path").on_press(Message::CopyToClipboard(
+                            rom.boxart_path.to_string_lossy().into()
+                        )),
+                        button("Choose Image").on_press(Message::ChooseReplacementImage(
+                            rom.boxart_path.clone(),
+                            rom_index
+                        )),
+                        button("Paste Image"),
                     ]
-                    .width(Length::Fill)
-                    .align_x(Alignment::Center)
-                    .spacing(10),
-                )
+                    .spacing(5)
+                ]
+                .width(Length::Fill)
+                .align_x(Alignment::Center)
+                .spacing(10)
+            } else {
+                column![
+                    image(&rom.boxart_path),
+                    row![
+                        button("Copy Path").on_press(Message::CopyToClipboard(
+                            rom.boxart_path.to_string_lossy().into()
+                        )),
+                        button("Choose Image").on_press(Message::ChooseReplacementImage(
+                            rom.boxart_path.clone(),
+                            rom_index
+                        )),
+                        button("Copy Image"),
+                        button("Paste Image"),
+                    ]
+                    .spacing(5)
+                ]
+                .width(Length::Fill)
+                .align_x(Alignment::Center)
+                .spacing(10)
             }
         ]
         .align_x(Alignment::Center)
