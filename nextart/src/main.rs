@@ -305,7 +305,10 @@ impl NextArtView {
             .into(),
 
             Self::ErrorList { state } => column![
-                text("Errors"),
+                row![
+                    button("Back").on_press(Message::OpenCollectionList(state.clone())),
+                    text("Errors")
+                ],
                 column(state.errors.iter().map(|x| {
                     row![
                         text(x),
