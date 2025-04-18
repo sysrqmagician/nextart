@@ -36,11 +36,11 @@ struct Collection {
 #[derive(Debug, Clone)]
 enum Message {
     NoOp,
-    OpenDirectoryPicker,
+    OpenRomDirectoryPicker,
     OpenRomList(NextArt, Vec<usize>),
     SelectRom(usize),
     CompletedIndexing(NextArt),
-    DirectoryChosen(PathBuf),
+    RomDirectoryChosen(PathBuf),
     SetupDone(PathBuf),
     SetClipboardText(String),
     SetClipboardImage(PathBuf),
@@ -186,7 +186,7 @@ impl NextArtView {
                     .width(Length::Fill),
                     button("Pick")
                         .padding([5, 10])
-                        .on_press(Message::OpenDirectoryPicker),
+                        .on_press(Message::OpenRomDirectoryPicker),
                 ]
                 .spacing(10),
                 row![
@@ -441,7 +441,7 @@ impl NextArtView {
                 );
             }
 
-            Message::OpenDirectoryPicker => {
+            Message::OpenRomDirectoryPicker => {
                 return Task::perform(
                     async move {
                         let dialog = FileDialog::new();
@@ -449,7 +449,7 @@ impl NextArtView {
                     },
                     |x| {
                         if let Some(x) = x {
-                            Message::DirectoryChosen(x)
+                            Message::RomDirectoryChosen(x)
                         } else {
                             Message::NoOp
                         }
@@ -457,7 +457,7 @@ impl NextArtView {
                 );
             }
 
-            Message::DirectoryChosen(path) => {
+            Message::RomDirectoryChosen(path) => {
                 if let NextArtView::Setup { chosen_path } = self {
                     *chosen_path = Some(path);
                 }
