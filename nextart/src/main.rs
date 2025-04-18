@@ -94,6 +94,9 @@ impl State {
         for entry in std::fs::read_dir(&collection_direntry.path())? {
             let mut media_folder = collection_direntry.path().clone();
             media_folder.push(".media");
+            if !media_folder.exists() {
+                std::fs::create_dir(&media_folder)?;
+            }
 
             if let Ok(entry) = entry {
                 if !entry.file_type()?.is_file() {
