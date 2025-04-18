@@ -49,14 +49,15 @@ enum Message {
 struct NextArt {
     roms_folder: PathBuf,
     index: Index,
+    errors: Vec<String>,
 }
 
 impl NextArt {
-    pub fn index_roms(&mut self) {
-        for entry in std::fs::read_dir(&self.roms_folder).unwrap() {
+    pub fn index_roms(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in std::fs::read_dir(&self.roms_folder)? {
             if let Ok(entry) = entry {
-                if entry.file_type().unwrap().is_dir() {
-                    self.index_collection_folder(entry);
+                if entry.file_type()?.is_dir() {
+                    self.index_collection_folder(entry)?;
                 }
             }
         }
@@ -68,36 +69,50 @@ impl NextArt {
             .filter(|x| !x.rom_indices.is_empty())
             .cloned()
             .collect();
+
+        Ok(())
     }
 
-    fn index_collection_folder(&mut self, collection_direntry: DirEntry) {
+    fn index_collection_folder(
+        &mut self,
+        collection_direntry: DirEntry,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut collection = Collection {
             name: collection_direntry.file_name().to_string_lossy().into(),
             rom_indices: Vec::new(),
         };
 
-        for entry in std::fs::read_dir(&collection_direntry.path()).unwrap() {
+        for entry in std::fs::read_dir(&collection_direntry.path())? {
             let mut media_folder = collection_direntry.path().clone();
             media_folder.push(".media");
 
             if let Ok(entry) = entry {
-                if !entry.file_type().unwrap().is_file() {
+                if !entry.file_type()?.is_file() {
                     continue;
                 }
 
                 let mut boxart_path = media_folder.clone();
                 boxart_path.push(&format!(
                     "{}.png",
-                    entry.path().file_stem().unwrap().display()
+                    entry
+                        .path()
+                        .file_stem()
+                        .ok_or(format!("Failed to extract file stem: {entry:#?}"))?
+                        .display()
                 ));
 
                 let mut rom = Rom {
-                    name: entry.path().file_stem().unwrap().to_string_lossy().into(),
+                    name: entry
+                        .path()
+                        .file_stem()
+                        .ok_or(format!("Failed to extract file stem: {entry:#?}"))?
+                        .to_string_lossy()
+                        .into(),
                     boxart_path: boxart_path.clone(),
                     boxart_size: 0,
                 };
 
-                if std::fs::exists(&boxart_path).unwrap() {
+                if std::fs::exists(&boxart_path)? {
                     if let Ok(metadata) = std::fs::metadata(&boxart_path) {
                         rom.boxart_size = metadata.size();
                     }
@@ -109,6 +124,8 @@ impl NextArt {
         }
 
         self.index.collections.push(collection);
+
+        Ok(())
     }
 }
 
@@ -213,59 +230,65 @@ impl NextArtView {
                 state,
                 selected_index,
                 rom_indices,
-            } => row![
-                scrollable(
-                    column(
-                        rom_indices
-                            .iter()
-                            .filter_map(|rom_index| {
-                                if let Some(rom) = state.index.roms.get(*rom_index) {
-                                    Some((*rom_index, rom))
-                                } else {
-                                    None
-                                }
-                            })
-                            .map(|(index, rom)| {
-                                row![
-                                    button("Manage").on_press(Message::SelectRom(index)),
-                                    column![
-                                        text(rom.name.clone()).font(Font {
-                                            weight: Weight::Bold,
-                                            ..Default::default()
-                                        }),
-                                        if rom.boxart_size == 0 {
-                                            text("No box art")
-                                        } else {
-                                            text!(
-                                                "{} Box Art",
-                                                ByteSizeFormatter::format_auto(
-                                                    rom.boxart_size,
-                                                    bittenhumans::consts::System::Binary
+            } => {
+                row![
+                    scrollable(
+                        column(
+                            rom_indices
+                                .iter()
+                                .filter_map(|rom_index| {
+                                    if let Some(rom) = state.index.roms.get(*rom_index) {
+                                        Some((*rom_index, rom))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .map(|(index, rom)| {
+                                    row![
+                                        button("Manage").on_press(Message::SelectRom(index)),
+                                        column![
+                                            text(rom.name.clone()).font(Font {
+                                                weight: Weight::Bold,
+                                                ..Default::default()
+                                            }),
+                                            if rom.boxart_size == 0 {
+                                                text("No box art")
+                                            } else {
+                                                text!(
+                                                    "{} Box Art",
+                                                    ByteSizeFormatter::format_auto(
+                                                        rom.boxart_size,
+                                                        bittenhumans::consts::System::Binary
+                                                    )
                                                 )
-                                            )
-                                        }
-                                    ],
-                                ]
-                                .spacing(10)
-                                .into()
-                            }),
-                    )
-                    .spacing(20)
-                    .padding(30),
-                ),
-                if let Some(selected_index) = selected_index {
-                    Self::rom_info_column(state.index.roms.get(*selected_index).unwrap())
-                } else {
-                    column![
-                        text("No rom selected")
-                            .width(Length::Fill)
-                            .align_x(Horizontal::Center)
-                    ]
-                    .into()
-                }
-            ]
-            .padding(20)
-            .into(),
+                                            }
+                                        ],
+                                    ]
+                                    .spacing(10)
+                                    .into()
+                                }),
+                        )
+                        .spacing(20)
+                        .padding(30),
+                    ),
+                    if let Some(selected_index) = selected_index {
+                        Self::rom_info_column(
+                            state.index.roms.get(*selected_index).expect(
+                                "This should not be reachable! selected_index did not exist!",
+                            ),
+                        )
+                    } else {
+                        column![
+                            text("No rom selected")
+                                .width(Length::Fill)
+                                .align_x(Horizontal::Center)
+                        ]
+                        .into()
+                    }
+                ]
+                .padding(20)
+                .into()
+            }
 
             Self::Error { error_description } => column![
                 text(strings::UI_TITLE_ERROR).font(Font {
@@ -317,7 +340,13 @@ impl NextArtView {
                         let dialog = FileDialog::new();
                         dialog.pick_folder()
                     },
-                    |x| Message::DirectoryChosen(x.unwrap()),
+                    |x| {
+                        if let Some(x) = x {
+                            Message::DirectoryChosen(x)
+                        } else {
+                            Message::NoOp
+                        }
+                    },
                 );
             }
 
@@ -337,6 +366,7 @@ impl NextArtView {
                 *self = NextArtView::Loading {
                     state: NextArt {
                         roms_folder: path,
+                        errors: Vec::new(),
                         index: Index::default(),
                     },
                     message: strings::UI_SETUP_INDEXING.into(),
@@ -346,7 +376,9 @@ impl NextArtView {
                     let mut state = state.clone();
                     return Task::perform(
                         async move {
-                            state.index_roms();
+                            if let Err(e) = state.index_roms() {
+                                state.errors.push(e.to_string());
+                            }
                             state
                         },
                         |new_state| Message::CompletedIndexing(new_state),
