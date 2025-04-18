@@ -37,10 +37,12 @@ struct Collection {
 enum Message {
     NoOp,
     OpenRomDirectoryPicker,
-    OpenRomList(NextArt, Vec<usize>),
+    OpenRomList(State, Vec<usize>),
     SelectRom(usize),
-    CompletedIndexing(NextArt),
+    CompletedIndexing(State),
     RomDirectoryChosen(PathBuf),
+    OpenCollectionList(State),
+    OpenErrorList(State),
     SetupDone(PathBuf),
     SetClipboardText(String),
     SetClipboardImage(PathBuf),
@@ -53,13 +55,13 @@ enum Message {
 }
 
 #[derive(Debug, Clone)]
-struct NextArt {
+struct State {
     roms_folder: PathBuf,
     index: Index,
     errors: Vec<String>,
 }
 
-impl NextArt {
+impl State {
     pub fn index_roms(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         for entry in std::fs::read_dir(&self.roms_folder)? {
             if let Ok(entry) = entry {
@@ -142,14 +144,14 @@ enum NextArtView {
         chosen_path: Option<PathBuf>,
     },
     Loading {
-        state: NextArt,
+        state: State,
         message: String,
     },
     CollectionList {
-        state: NextArt,
+        state: State,
     },
     RomList {
-        state: NextArt,
+        state: State,
         selected_index: Option<usize>,
         rom_indices: Vec<usize>,
     },
@@ -157,7 +159,7 @@ enum NextArtView {
         error_description: String,
     },
     ErrorList {
-        state: NextArt,
+        state: State,
     },
 }
 
@@ -301,7 +303,17 @@ impl NextArtView {
                 .into()
             }
 
-            Self::ErrorList { state } => todo!(),
+            Self::ErrorList { state } => column![
+                text("Errors"),
+                column(state.errors.iter().map(|x| {
+                    row![
+                        text(x),
+                        button("Copy").on_press(Message::SetClipboardText(x.clone()))
+                    ]
+                    .into()
+                }))
+            ]
+            .into(),
 
             Self::FatalError { error_description } => column![
                 text(strings::UI_TITLE_ERROR).font(Font {
@@ -326,6 +338,14 @@ impl NextArtView {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::NoOp => {}
+
+            Message::OpenCollectionList(state) => {
+                *self = NextArtView::CollectionList { state };
+            }
+
+            Message::OpenErrorList(state) => {
+                *self = NextArtView::ErrorList { state };
+            }
 
             Message::ReplacementImageFromClip(boxart_path, rom_index) => {
                 return Task::perform(
@@ -471,7 +491,7 @@ impl NextArtView {
 
             Message::SetupDone(path) => {
                 *self = NextArtView::Loading {
-                    state: NextArt {
+                    state: State {
                         roms_folder: path,
                         errors: Vec::new(),
                         index: Index::default(),
