@@ -639,7 +639,7 @@ impl NextArtView {
                         weight: Weight::Bold,
                         ..Default::default()
                     })
-                    .size(FONT_SIZE_TITLE),
+                    .size((FONT_SIZE_TITLE as f32 / 1.5).ceil()),
                 if rom.boxart_size == 0 {
                     column![
                         text(strings::LABEL_NO_IMAGE).font(Font {
