@@ -189,20 +189,20 @@ impl NextArtView {
                             .map_or("".to_owned(), |x| x.to_string_lossy().to_string())
                     )
                     .width(Length::Fill),
-                    button("Pick")
+                    button(strings::LABEL_PICK)
                         .padding([5, 10])
                         .on_press(Message::OpenRomDirectoryPicker),
                 ]
                 .spacing(10),
                 row![
                     Space::with_width(Length::Fill),
-                    button("Done")
-                        .padding([10, 20])
-                        .on_press(if let Some(path) = chosen_path {
+                    button(strings::LABEL_DONE).padding([10, 20]).on_press(
+                        if let Some(path) = chosen_path {
                             Message::SetupDone(path.clone())
                         } else {
                             Message::ViewError(strings::ERROR_NO_PATH.into())
-                        })
+                        }
+                    )
                 ]
             ]
             .spacing(20)
@@ -223,13 +223,14 @@ impl NextArtView {
             Self::CollectionList { state } => scrollable(
                 column(state.index.collections.iter().map(|x| {
                     row![
-                        button("Open").on_press(Message::OpenRomList(x.rom_indices.clone())),
+                        button(strings::LABEL_OPEN)
+                            .on_press(Message::OpenRomList(x.rom_indices.clone())),
                         column![
                             text(x.name.clone()).font(Font {
                                 weight: Weight::Bold,
                                 ..Default::default()
                             }),
-                            text!("{} Roms", x.rom_indices.len())
+                            text!("{} {}", x.rom_indices.len(), strings::LABEL_ROMS)
                         ],
                     ]
                     .spacing(10)
@@ -245,7 +246,7 @@ impl NextArtView {
                 selected_index,
                 rom_indices,
             } => column![
-                button("Back").on_press(Message::OpenCollectionList),
+                button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
                 row![
                     scrollable(
                         column(
@@ -260,21 +261,23 @@ impl NextArtView {
                                 })
                                 .map(|(index, rom)| {
                                     row![
-                                        button("Manage").on_press(Message::SelectRom(index)),
+                                        button(strings::LABEL_MANAGE)
+                                            .on_press(Message::SelectRom(index)),
                                         column![
                                             text(rom.name.clone()).font(Font {
                                                 weight: Weight::Bold,
                                                 ..Default::default()
                                             }),
                                             if rom.boxart_size == 0 {
-                                                text("No box art")
+                                                text(strings::LABEL_NO_BOX_ART)
                                             } else {
                                                 text!(
-                                                    "{} Box Art",
+                                                    "{} {}",
                                                     ByteSizeFormatter::format_auto(
                                                         rom.boxart_size,
                                                         bittenhumans::consts::System::Binary
-                                                    )
+                                                    ),
+                                                    strings::LABEL_BOX_ART
                                                 )
                                             }
                                         ],
@@ -295,7 +298,7 @@ impl NextArtView {
                         )
                     } else {
                         column![
-                            text("No rom selected")
+                            text(strings::LABEL_NO_ROM_SELECTED)
                                 .width(Length::Fill)
                                 .align_x(Horizontal::Center)
                         ]
@@ -308,13 +311,13 @@ impl NextArtView {
 
             Self::ErrorList { state } => column![
                 row![
-                    button("Back").on_press(Message::OpenCollectionList),
-                    text("Errors")
+                    button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
+                    text(strings::UI_TITLE_ERRORS)
                 ],
                 column(state.errors.iter().map(|x| {
                     row![
                         text(x),
-                        button("Copy").on_press(Message::SetClipboardText(x.clone()))
+                        button(strings::LABEL_COPY).on_press(Message::SetClipboardText(x.clone()))
                     ]
                     .into()
                 }))
@@ -330,9 +333,10 @@ impl NextArtView {
                     color: Some(theme.palette().text.scale_alpha(0.5))
                 }),
                 row![
-                    button("Restart").on_press(Message::ResetState),
+                    button(strings::LABEL_RESTART).on_press(Message::ResetState),
                     Space::with_width(Length::Fill),
-                    button("Copy").on_press(Message::SetClipboardText(error_description.clone()))
+                    button(strings::LABEL_COPY)
+                        .on_press(Message::SetClipboardText(error_description.clone()))
                 ]
             ]
             .spacing(20)
@@ -352,7 +356,7 @@ impl NextArtView {
                 other => {
                     *self = other;
                     return Task::perform(
-                        async { String::from("Cannot navigate: No state available") },
+                        async { String::from(strings::ERROR_CANNOT_NAVIGATE) },
                         Message::RecordError,
                     );
                 }
@@ -381,7 +385,7 @@ impl NextArtView {
                             image.height as u32,
                             image.bytes.to_vec(),
                         )
-                        .ok_or_else(|| "Failed to create image from clipboard data".to_string())?;
+                        .ok_or_else(|| strings::ERROR_CLIPBOARD_IMAGE.to_string())?;
                         rgba_image
                             .save_with_format(&boxart_path, ::image::ImageFormat::Png)
                             .map_err(|e| e.to_string())?;
@@ -486,7 +490,7 @@ impl NextArtView {
                                 ));
                             }
                         } else {
-                            return Err("No file selected".into());
+                            return Err(strings::ERROR_NO_FILE_SELECTED.into());
                         }
                     },
                     move |x| match x {
@@ -567,22 +571,23 @@ impl NextArtView {
                     .size(32),
                 if rom.boxart_size == 0 {
                     column![
-                        text("No image").font(Font {
+                        text(strings::LABEL_NO_IMAGE).font(Font {
                             weight: Weight::Light,
                             ..Default::default()
                         }),
                         row![
-                            button("Copy Path").on_press(Message::SetClipboardText(
+                            button(strings::LABEL_COPY_PATH).on_press(Message::SetClipboardText(
                                 rom.boxart_path.to_string_lossy().into()
                             )),
-                            button("Choose Image").on_press(Message::ChooseReplacementImage(
-                                rom.boxart_path.clone(),
-                                rom_index
-                            )),
-                            button("Paste Image").on_press(Message::ReplacementImageFromClip(
-                                rom.boxart_path.clone(),
-                                rom_index
-                            )),
+                            button(strings::LABEL_CHOOSE_IMAGE).on_press(
+                                Message::ChooseReplacementImage(rom.boxart_path.clone(), rom_index)
+                            ),
+                            button(strings::LABEL_PASTE_IMAGE).on_press(
+                                Message::ReplacementImageFromClip(
+                                    rom.boxart_path.clone(),
+                                    rom_index
+                                )
+                            ),
                         ]
                         .spacing(5)
                     ]
@@ -593,19 +598,20 @@ impl NextArtView {
                     column![
                         image(&rom.boxart_path),
                         row![
-                            button("Copy Path").on_press(Message::SetClipboardText(
+                            button(strings::LABEL_COPY_PATH).on_press(Message::SetClipboardText(
                                 rom.boxart_path.to_string_lossy().into()
                             )),
-                            button("Choose Image").on_press(Message::ChooseReplacementImage(
-                                rom.boxart_path.clone(),
-                                rom_index
-                            )),
-                            button("Copy Image")
+                            button(strings::LABEL_CHOOSE_IMAGE).on_press(
+                                Message::ChooseReplacementImage(rom.boxart_path.clone(), rom_index)
+                            ),
+                            button(strings::LABEL_COPY_IMAGE)
                                 .on_press(Message::SetClipboardImage(rom.boxart_path.clone())),
-                            button("Paste Image").on_press(Message::ReplacementImageFromClip(
-                                rom.boxart_path.clone(),
-                                rom_index
-                            )),
+                            button(strings::LABEL_PASTE_IMAGE).on_press(
+                                Message::ReplacementImageFromClip(
+                                    rom.boxart_path.clone(),
+                                    rom_index
+                                )
+                            ),
                         ]
                         .spacing(5)
                     ]
