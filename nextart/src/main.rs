@@ -1,10 +1,11 @@
-use std::{fs::DirEntry, io::Read, path::PathBuf};
+use std::{fs::DirEntry, path::PathBuf};
 
-use ::image::{EncodableLayout, ImageDecoder, ImageReader, RgbaImage};
+use ::image::{EncodableLayout, ImageReader, RgbaImage};
 use arboard::{Clipboard, ImageData};
 use bittenhumans::ByteSizeFormatter;
 use iced::{
-    Alignment, Element, Font, Length, Task,
+    Alignment::{self, Center},
+    Color, Element, Font, Length, Task,
     alignment::Horizontal,
     clipboard,
     font::Weight,
@@ -37,7 +38,7 @@ struct Collection {
 enum Message {
     NoOp,
     OpenRomDirectoryPicker,
-    OpenRomList(Vec<usize>),
+    OpenRomList(String, Vec<usize>),
     SelectRom(usize),
     CompletedIndexing(State),
     RomDirectoryChosen(PathBuf),
@@ -155,6 +156,7 @@ enum NextArtView {
     },
     RomList {
         state: State,
+        title: String,
         selected_index: Option<usize>,
         rom_indices: Vec<usize>,
     },
@@ -221,32 +223,81 @@ impl NextArtView {
             .into(),
 
             Self::CollectionList { state } => scrollable(
-                column(state.index.collections.iter().map(|x| {
-                    row![
-                        button(strings::LABEL_OPEN)
-                            .on_press(Message::OpenRomList(x.rom_indices.clone())),
-                        column![
-                            text(x.name.clone()).font(Font {
-                                weight: Weight::Bold,
+                column![
+                    text(strings::UI_TITLE_MAIN)
+                        .font(Font {
+                            weight: Weight::Light,
+                            ..Default::default()
+                        })
+                        .size(32)
+                        .width(Length::Fill)
+                        .align_x(Alignment::Center),
+                    column(state.index.collections.iter().map(|x| {
+                        row![
+                            button(strings::LABEL_OPEN).on_press(Message::OpenRomList(
+                                x.name.clone(),
+                                x.rom_indices.clone()
+                            )),
+                            column![
+                                text(x.name.clone()).font(Font {
+                                    weight: Weight::Bold,
+                                    ..Default::default()
+                                }),
+                                text!("{} {}", x.rom_indices.len(), strings::LABEL_ROMS)
+                            ],
+                        ]
+                        .spacing(10)
+                        .into()
+                    }))
+                    .spacing(20)
+                    .padding(30),
+                    if state.errors.len() != 0 {
+                        Element::from(
+                            button(strings::LABEL_SHOW_ERRORS)
+                                .on_press(Message::OpenErrorList)
+                                .style(|theme: &iced::Theme, status| button::Style {
+                                    background: if let button::Status::Hovered = status {
+                                        Some(iced::Background::Color(
+                                            theme.extended_palette().danger.strong.color,
+                                        ))
+                                    } else {
+                                        Some(iced::Background::Color(
+                                            theme.extended_palette().danger.base.color,
+                                        ))
+                                    },
+                                    ..Default::default()
+                                }),
+                        )
+                    } else {
+                        text(strings::LABEL_NO_ERRORS)
+                            .font(Font {
+                                weight: Weight::Light,
                                 ..Default::default()
-                            }),
-                            text!("{} {}", x.rom_indices.len(), strings::LABEL_ROMS)
-                        ],
-                    ]
-                    .spacing(10)
-                    .into()
-                }))
-                .spacing(20)
+                            })
+                            .into()
+                    }
+                ]
                 .padding(30),
             )
             .into(),
 
             Self::RomList {
                 state,
+                title,
                 selected_index,
                 rom_indices,
             } => column![
-                button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
+                row![
+                    button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
+                    text(title)
+                        .font(Font {
+                            weight: Weight::Light,
+                            ..Default::default()
+                        })
+                        .size(32)
+                        .width(Length::Fill)
+                        .align_x(Alignment::Center)
+                ],
                 row![
                     scrollable(
                         column(
@@ -307,21 +358,30 @@ impl NextArtView {
                 ]
                 .padding(20)
             ]
+            .spacing(20)
+            .padding(30)
             .into(),
 
             Self::ErrorList { state } => column![
                 row![
                     button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
                     text(strings::UI_TITLE_ERRORS)
-                ],
+                        .size(32)
+                        .width(Length::Fill)
+                        .align_x(Alignment::Center)
+                ]
+                .spacing(10),
                 column(state.errors.iter().map(|x| {
                     row![
-                        text(x),
-                        button(strings::LABEL_COPY).on_press(Message::SetClipboardText(x.clone()))
+                        button(strings::LABEL_COPY).on_press(Message::SetClipboardText(x.clone())),
+                        text(x)
                     ]
+                    .spacing(10)
                     .into()
                 }))
             ]
+            .spacing(20)
+            .padding(30)
             .into(),
 
             Self::FatalError { error_description } => column![
@@ -438,11 +498,12 @@ impl NextArtView {
                 *self = NextArtView::Setup { chosen_path: None };
             }
 
-            Message::OpenRomList(rom_indices) => {
+            Message::OpenRomList(title, rom_indices) => {
                 match std::mem::replace(self, NextArtView::default()) {
                     NextArtView::CollectionList { state } | NextArtView::ErrorList { state } => {
                         *self = NextArtView::RomList {
                             state,
+                            title,
                             selected_index: None,
                             rom_indices,
                         };
@@ -532,7 +593,7 @@ impl NextArtView {
                 *self = NextArtView::Loading {
                     state: State {
                         roms_folder: path,
-                        errors: Vec::new(),
+                        errors: vec!["a".into()],
                         index: Index::default(),
                     },
                     message: strings::UI_SETUP_INDEXING.into(),
