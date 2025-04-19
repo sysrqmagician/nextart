@@ -37,12 +37,12 @@ struct Collection {
 enum Message {
     NoOp,
     OpenRomDirectoryPicker,
-    OpenRomList(State, Vec<usize>),
+    OpenRomList(Vec<usize>),
     SelectRom(usize),
     CompletedIndexing(State),
     RomDirectoryChosen(PathBuf),
-    OpenCollectionList(State),
-    OpenErrorList(State),
+    OpenCollectionList,
+    OpenErrorList,
     SetupDone(PathBuf),
     SetClipboardText(String),
     SetClipboardImage(PathBuf),
@@ -223,8 +223,7 @@ impl NextArtView {
             Self::CollectionList { state } => scrollable(
                 column(state.index.collections.iter().map(|x| {
                     row![
-                        button("Open")
-                            .on_press(Message::OpenRomList(state.clone(), x.rom_indices.clone())),
+                        button("Open").on_press(Message::OpenRomList(x.rom_indices.clone())),
                         column![
                             text(x.name.clone()).font(Font {
                                 weight: Weight::Bold,
@@ -246,7 +245,7 @@ impl NextArtView {
                 selected_index,
                 rom_indices,
             } => column![
-                button("Back").on_press(Message::OpenCollectionList(state.clone())),
+                button("Back").on_press(Message::OpenCollectionList),
                 row![
                     scrollable(
                         column(
@@ -309,7 +308,7 @@ impl NextArtView {
 
             Self::ErrorList { state } => column![
                 row![
-                    button("Back").on_press(Message::OpenCollectionList(state.clone())),
+                    button("Back").on_press(Message::OpenCollectionList),
                     text("Errors")
                 ],
                 column(state.errors.iter().map(|x| {
@@ -346,13 +345,31 @@ impl NextArtView {
         match message {
             Message::NoOp => {}
 
-            Message::OpenCollectionList(state) => {
-                *self = NextArtView::CollectionList { state };
-            }
+            Message::OpenCollectionList => match std::mem::replace(self, NextArtView::default()) {
+                NextArtView::RomList { state, .. } | NextArtView::ErrorList { state } => {
+                    *self = NextArtView::CollectionList { state };
+                }
+                other => {
+                    *self = other;
+                    return Task::perform(
+                        async { String::from("Cannot navigate: No state available") },
+                        Message::RecordError,
+                    );
+                }
+            },
 
-            Message::OpenErrorList(state) => {
-                *self = NextArtView::ErrorList { state };
-            }
+            Message::OpenErrorList => match std::mem::replace(self, NextArtView::default()) {
+                NextArtView::RomList { state, .. } | NextArtView::CollectionList { state } => {
+                    *self = NextArtView::ErrorList { state };
+                }
+                other => {
+                    *self = other;
+                    return Task::perform(
+                        async { String::from("Cannot navigate: No state available") },
+                        Message::RecordError,
+                    );
+                }
+            },
 
             Message::ReplacementImageFromClip(boxart_path, rom_index) => {
                 return Task::perform(
@@ -417,12 +434,23 @@ impl NextArtView {
                 *self = NextArtView::Setup { chosen_path: None };
             }
 
-            Message::OpenRomList(state, rom_indices) => {
-                *self = NextArtView::RomList {
-                    state,
-                    selected_index: None,
-                    rom_indices,
-                };
+            Message::OpenRomList(rom_indices) => {
+                match std::mem::replace(self, NextArtView::default()) {
+                    NextArtView::CollectionList { state } | NextArtView::ErrorList { state } => {
+                        *self = NextArtView::RomList {
+                            state,
+                            selected_index: None,
+                            rom_indices,
+                        };
+                    }
+                    other => {
+                        *self = other;
+                        return Task::perform(
+                            async { String::from("Cannot navigate: No state available") },
+                            Message::RecordError,
+                        );
+                    }
+                }
             }
 
             Message::RecordError(error_description) => {
