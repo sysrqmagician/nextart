@@ -4,8 +4,7 @@ use ::image::{EncodableLayout, ImageReader, RgbaImage};
 use arboard::{Clipboard, ImageData};
 use bittenhumans::ByteSizeFormatter;
 use iced::{
-    Alignment::{self, Center},
-    Color, Element, Font, Length, Task,
+    Alignment, Element, Font, Length, Task,
     alignment::Horizontal,
     clipboard,
     font::Weight,
