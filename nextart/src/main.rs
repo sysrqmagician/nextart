@@ -603,7 +603,7 @@ impl NextArtView {
                 *self = NextArtView::Loading {
                     state: State {
                         roms_folder: path,
-                        errors: vec!["a".into()],
+                        errors: Vec::new(),
                         index: Index::default(),
                     },
                     message: strings::UI_SETUP_INDEXING.into(),
