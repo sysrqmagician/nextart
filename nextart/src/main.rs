@@ -13,6 +13,7 @@ use iced::{
 use rfd::FileDialog;
 
 mod strings;
+
 // UI Constants
 const PADDING_STANDARD: u16 = 30;
 const PADDING_SMALL: u16 = 20;
@@ -296,81 +297,84 @@ impl NextArtView {
                 title,
                 selected_index,
                 rom_indices,
-            } => column![
-                row![
-                    button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
-                    text(title)
-                        .font(Font {
-                            weight: Weight::Light,
-                            ..Default::default()
-                        })
-                        .size(32)
-                        .width(Length::Fill)
-                        .align_x(Alignment::Center)
-                ],
-                row![
-                    scrollable(
-                        column(
-                            rom_indices
-                                .iter()
-                                .filter_map(|rom_index| {
-                                    if let Some(rom) = state.index.roms.get(*rom_index) {
-                                        Some((*rom_index, rom))
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .map(|(index, rom)| {
-                                    row![
-                                        button(strings::LABEL_MANAGE)
-                                            .on_press(Message::SelectRom(index)),
-                                        column![
-                                            text(rom.name.clone()).font(Font {
-                                                weight: Weight::Bold,
-                                                ..Default::default()
-                                            }),
-                                            if rom.boxart_size == 0 {
-                                                text(strings::LABEL_NO_BOX_ART)
-                                            } else {
-                                                text!(
-                                                    "{} {}",
-                                                    ByteSizeFormatter::format_auto(
-                                                        rom.boxart_size,
-                                                        bittenhumans::consts::System::Binary
-                                                    ),
-                                                    strings::LABEL_BOX_ART
-                                                )
-                                            }
-                                        ],
-                                    ]
-                                    .spacing(SPACING_SMALL)
-                                    .into()
-                                }),
-                        )
-                        .spacing(SPACING_STANDARD)
-                        .padding(PADDING_STANDARD),
-                    ),
-                    if let Some(selected_index) = selected_index {
-                        Self::rom_info_column(
-                            state.index.roms.get(*selected_index).expect(
-                                "This should not be reachable! selected_index did not exist!",
-                            ),
-                            *selected_index,
-                        )
-                    } else {
-                        column![
-                            text(strings::LABEL_NO_ROM_SELECTED)
-                                .width(Length::Fill)
-                                .align_x(Horizontal::Center)
-                        ]
-                        .into()
-                    }
+            } => {
+                let mut rom_indice_tuples: Vec<(usize, &Rom)> = rom_indices
+                    .iter()
+                    .filter_map(|rom_index| {
+                        if let Some(rom) = state.index.roms.get(*rom_index) {
+                            Some((*rom_index, rom))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                rom_indice_tuples.sort_by_key(|x| &x.1.name);
+
+                column![
+                    row![
+                        button(strings::LABEL_BACK).on_press(Message::OpenCollectionList),
+                        text(title)
+                            .font(Font {
+                                weight: Weight::Light,
+                                ..Default::default()
+                            })
+                            .size(32)
+                            .width(Length::Fill)
+                            .align_x(Alignment::Center)
+                    ],
+                    row![
+                        scrollable(
+                            column(rom_indice_tuples.iter().map(|(index, rom)| {
+                                row![
+                                    button(strings::LABEL_MANAGE)
+                                        .on_press(Message::SelectRom(*index)),
+                                    column![
+                                        text(rom.name.clone()).font(Font {
+                                            weight: Weight::Bold,
+                                            ..Default::default()
+                                        }),
+                                        if rom.boxart_size == 0 {
+                                            text(strings::LABEL_NO_BOX_ART)
+                                        } else {
+                                            text!(
+                                                "{} {}",
+                                                ByteSizeFormatter::format_auto(
+                                                    rom.boxart_size,
+                                                    bittenhumans::consts::System::Binary
+                                                ),
+                                                strings::LABEL_BOX_ART
+                                            )
+                                        }
+                                    ],
+                                ]
+                                .spacing(SPACING_SMALL)
+                                .into()
+                            }),)
+                            .spacing(SPACING_STANDARD)
+                            .padding(PADDING_STANDARD),
+                        ),
+                        if let Some(selected_index) = selected_index {
+                            Self::rom_info_column(
+                                state.index.roms.get(*selected_index).expect(
+                                    "This should not be reachable! selected_index did not exist!",
+                                ),
+                                *selected_index,
+                            )
+                        } else {
+                            column![
+                                text(strings::LABEL_NO_ROM_SELECTED)
+                                    .width(Length::Fill)
+                                    .align_x(Horizontal::Center)
+                            ]
+                            .into()
+                        }
+                    ]
+                    .padding(PADDING_SMALL)
                 ]
-                .padding(PADDING_SMALL)
-            ]
-            .spacing(20)
-            .padding(30)
-            .into(),
+                .spacing(20)
+                .padding(30)
+                .into()
+            }
 
             Self::ErrorList { state } => column![
                 row![
