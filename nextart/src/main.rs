@@ -14,6 +14,17 @@ use iced::{
 use rfd::FileDialog;
 
 mod strings;
+// UI Constants
+const PADDING_STANDARD: u16 = 30;
+const PADDING_SMALL: u16 = 20;
+const PADDING_BUTTON: [u16; 2] = [10, 20];
+const PADDING_BUTTON_SMALL: [u16; 2] = [5, 10];
+
+const SPACING_STANDARD: u16 = 20;
+const SPACING_SMALL: u16 = 10;
+const SPACING_TINY: u16 = 5;
+
+const FONT_SIZE_TITLE: u16 = 32;
 
 #[derive(Debug, Default, Clone)]
 struct Index {
@@ -192,23 +203,23 @@ impl NextArtView {
                     )
                     .width(Length::Fill),
                     button(strings::LABEL_PICK)
-                        .padding([5, 10])
+                        .padding(PADDING_BUTTON_SMALL)
                         .on_press(Message::OpenRomDirectoryPicker),
                 ]
-                .spacing(10),
+                .spacing(SPACING_SMALL),
                 row![
                     Space::with_width(Length::Fill),
-                    button(strings::LABEL_DONE).padding([10, 20]).on_press(
-                        if let Some(path) = chosen_path {
+                    button(strings::LABEL_DONE)
+                        .padding(PADDING_BUTTON)
+                        .on_press(if let Some(path) = chosen_path {
                             Message::SetupDone(path.clone())
                         } else {
                             Message::ViewError(strings::ERROR_NO_PATH.into())
-                        }
-                    )
+                        })
                 ]
             ]
-            .spacing(20)
-            .padding(30)
+            .spacing(SPACING_STANDARD)
+            .padding(PADDING_STANDARD)
             .into(),
 
             Self::Loading { message, .. } => column![
@@ -229,7 +240,7 @@ impl NextArtView {
                             weight: Weight::Light,
                             ..Default::default()
                         })
-                        .size(32)
+                        .size(FONT_SIZE_TITLE)
                         .width(Length::Fill)
                         .align_x(Alignment::Center),
                     column(state.index.collections.iter().map(|x| {
@@ -246,11 +257,11 @@ impl NextArtView {
                                 text!("{} {}", x.rom_indices.len(), strings::LABEL_ROMS)
                             ],
                         ]
-                        .spacing(10)
+                        .spacing(SPACING_SMALL)
                         .into()
                     }))
-                    .spacing(20)
-                    .padding(30),
+                    .spacing(SPACING_STANDARD)
+                    .padding(PADDING_STANDARD),
                     if state.errors.len() != 0 {
                         Element::from(
                             button(strings::LABEL_SHOW_ERRORS)
@@ -333,12 +344,12 @@ impl NextArtView {
                                             }
                                         ],
                                     ]
-                                    .spacing(10)
+                                    .spacing(SPACING_SMALL)
                                     .into()
                                 }),
                         )
-                        .spacing(20)
-                        .padding(30),
+                        .spacing(SPACING_STANDARD)
+                        .padding(PADDING_STANDARD),
                     ),
                     if let Some(selected_index) = selected_index {
                         Self::rom_info_column(
@@ -356,7 +367,7 @@ impl NextArtView {
                         .into()
                     }
                 ]
-                .padding(20)
+                .padding(PADDING_SMALL)
             ]
             .spacing(20)
             .padding(30)
@@ -629,7 +640,7 @@ impl NextArtView {
                         weight: Weight::Bold,
                         ..Default::default()
                     })
-                    .size(32),
+                    .size(FONT_SIZE_TITLE),
                 if rom.boxart_size == 0 {
                     column![
                         text(strings::LABEL_NO_IMAGE).font(Font {
@@ -650,7 +661,7 @@ impl NextArtView {
                                 )
                             ),
                         ]
-                        .spacing(5)
+                        .spacing(SPACING_TINY)
                     ]
                     .width(Length::Fill)
                     .align_x(Alignment::Center)
