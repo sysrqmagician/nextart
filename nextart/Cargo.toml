@@ -6,7 +6,7 @@ authors = ["sysrqmagician"]
 description = "Box art manager for NextUI"
 repository = "https://github.com/sysrqmagician/nextart"
 license = "GPL-3.0-only"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["gaming", "emulation", "box-art", "roms", "gui"]
 categories = ["gui", "multimedia"]
 
