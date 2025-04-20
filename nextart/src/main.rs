@@ -80,11 +80,43 @@ struct State {
 
 impl State {
     pub fn index_roms(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        for entry in std::fs::read_dir(&self.roms_folder)? {
-            if let Ok(entry) = entry {
-                if entry.file_type()?.is_dir() {
-                    self.index_collection_folder(entry)?;
+        let read_dir = std::fs::read_dir(&self.roms_folder).map_err(|e| {
+            format!(
+                "{}{}': {}",
+                strings::ERROR_PREFIX_DIR_READ,
+                self.roms_folder.display(),
+                e
+            )
+        })?;
+
+        for entry_result in read_dir {
+            if let Ok(entry) = entry_result {
+                let entry_path = entry.path();
+                match entry.file_type() {
+                    Ok(file_type) => {
+                        if file_type.is_dir() {
+                            if let Err(e) = self.index_collection_folder(entry) {
+                                self.errors.push(format!(
+                                    "{}{}': {}",
+                                    strings::ERROR_PREFIX_INDEX_COLLECTION,
+                                    entry_path.display(),
+                                    e
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.errors.push(format!(
+                            "{}{}': {}",
+                            strings::ERROR_PREFIX_DIR_TYPE,
+                            entry.path().display(),
+                            e
+                        ));
+                    }
                 }
+            } else if let Err(e) = entry_result {
+                self.errors
+                    .push(format!("{}{}", strings::ERROR_PREFIX_DIR_ENTRY, e));
             }
         }
 
@@ -103,16 +135,36 @@ impl State {
         &mut self,
         collection_direntry: DirEntry,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let collection_path = collection_direntry.path();
+        let collection_name_os = collection_direntry.file_name();
+        let collection_name = collection_name_os.to_string_lossy();
+
         let mut collection = Collection {
-            name: collection_direntry.file_name().to_string_lossy().into(),
+            name: collection_name.to_string(),
             rom_indices: Vec::new(),
         };
 
-        for entry in std::fs::read_dir(&collection_direntry.path())? {
+        let read_dir = std::fs::read_dir(&collection_path).map_err(|e| {
+            format!(
+                "{}{}': {}",
+                strings::ERROR_PREFIX_READ_COLLECTION,
+                collection_path.display(),
+                e
+            )
+        })?;
+
+        for entry in read_dir {
             let mut media_folder = collection_direntry.path().clone();
             media_folder.push(".media");
             if !media_folder.exists() {
-                std::fs::create_dir(&media_folder)?;
+                std::fs::create_dir(&media_folder).map_err(|e| {
+                    format!(
+                        "{}{}': {}",
+                        strings::ERROR_PREFIX_MEDIA_DIR,
+                        media_folder.display(),
+                        e
+                    )
+                })?;
             }
 
             if let Ok(entry) = entry {
@@ -126,7 +178,7 @@ impl State {
                     entry
                         .path()
                         .file_stem()
-                        .ok_or(format!("Failed to extract file stem: {entry:#?}"))?
+                        .ok_or(format!("{}{:#?}", strings::ERROR_PREFIX_FILE_STEM, entry))?
                         .display()
                 ));
 
@@ -141,9 +193,27 @@ impl State {
                     boxart_size: 0,
                 };
 
-                if std::fs::exists(&boxart_path)? {
-                    if let Ok(metadata) = std::fs::metadata(&boxart_path) {
-                        rom.boxart_size = metadata.len();
+                match std::fs::exists(&boxart_path) {
+                    Ok(exists) => {
+                        if exists {
+                            if let Ok(metadata) = std::fs::metadata(&boxart_path) {
+                                rom.boxart_size = metadata.len();
+                            } else {
+                                self.errors.push(format!(
+                                    "{}{}'",
+                                    strings::ERROR_PREFIX_GET_METADATA,
+                                    boxart_path.display()
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.errors.push(format!(
+                            "{}{}: {}'",
+                            strings::ERROR_PREFIX_GET_METADATA,
+                            boxart_path.display(),
+                            e
+                        ));
                     }
                 }
 
@@ -457,7 +527,7 @@ impl NextArtView {
                 other => {
                     *self = other;
                     return Task::perform(
-                        async { String::from("Cannot navigate: No state available") },
+                        async { String::from(strings::ERROR_CANNOT_NAVIGATE_COLLECTIONS) },
                         Message::RecordError,
                     );
                 }
@@ -466,20 +536,38 @@ impl NextArtView {
             Message::ReplacementImageFromClip(boxart_path, rom_index) => {
                 return Task::perform(
                     async move {
-                        let mut clip = Clipboard::new().map_err(|e| e.to_string())?;
-                        let image = clip.get_image().map_err(|e| e.to_string())?;
+                        let mut clip = Clipboard::new().map_err(|e| {
+                            format!("{}{}", strings::ERROR_PREFIX_ACCESS_CLIPBOARD, e)
+                        })?;
+                        let image = clip.get_image().map_err(|e| {
+                            format!("{}{}", strings::ERROR_PREFIX_CLIPBOARD_IMAGE, e)
+                        })?;
                         let rgba_image = RgbaImage::from_vec(
                             image.width as u32,
                             image.height as u32,
                             image.bytes.to_vec(),
                         )
-                        .ok_or_else(|| strings::ERROR_CLIPBOARD_IMAGE.to_string())?;
+                        .ok_or_else(|| strings::ERROR_FAILED_CREATE_IMAGE)?;
                         rgba_image
                             .save_with_format(&boxart_path, ::image::ImageFormat::Png)
-                            .map_err(|e| e.to_string())?;
+                            .map_err(|e| {
+                                format!(
+                                    "{}{}': {}",
+                                    strings::ERROR_PREFIX_SAVE_IMAGE,
+                                    boxart_path.display(),
+                                    e
+                                )
+                            })?;
 
                         std::fs::metadata(&boxart_path)
-                            .map_err(|e| e.to_string())
+                            .map_err(|e| {
+                                format!(
+                                    "{}{}': {}",
+                                    strings::ERROR_PREFIX_GET_METADATA_SAVED,
+                                    boxart_path.display(),
+                                    e
+                                )
+                            })
                             .map(|m| m.len())
                     },
                     move |result| match result {
@@ -492,19 +580,32 @@ impl NextArtView {
             Message::SetClipboardImage(image_path) => {
                 return Task::perform(
                     async move {
-                        let img = ImageReader::open(image_path)
-                            .map_err(|x| x.to_string())?
+                        let img = ImageReader::open(&image_path)
+                            .map_err(|x| {
+                                format!(
+                                    "{}{}': {}",
+                                    strings::ERROR_PREFIX_OPEN_IMAGE,
+                                    image_path.display(),
+                                    x
+                                )
+                            })?
                             .decode()
-                            .map_err(|x| x.to_string())?
+                            .map_err(|x| {
+                                format!("Failed to decode image '{}': {}", image_path.display(), x)
+                            })?
                             .into_rgba8();
-                        let mut clip = Clipboard::new().map_err(|x| x.to_string())?;
+                        let mut clip = Clipboard::new().map_err(|x| {
+                            format!("{}{}", strings::ERROR_PREFIX_ACCESS_CLIPBOARD, x)
+                        })?;
                         let img_data = ImageData {
                             width: img.width() as usize,
                             height: img.height() as usize,
                             bytes: img.as_bytes().into(),
                         };
 
-                        clip.set_image(img_data).map_err(|x| x.to_string())
+                        clip.set_image(img_data).map_err(|x| {
+                            format!("{}{}", strings::ERROR_PREFIX_COPY_TO_CLIPBOARD, x)
+                        })
                     },
                     |x: Result<(), String>| {
                         if let Err(e) = x {
@@ -583,7 +684,10 @@ impl NextArtView {
                                 return Ok(written);
                             } else {
                                 return Err(format!(
-                                    "Failed to copy file: {}",
+                                    "{}{}' to '{}': {}",
+                                    strings::ERROR_PREFIX_COPY_FILE,
+                                    picked.display(),
+                                    path.display(),
                                     written.unwrap_err()
                                 ));
                             }
@@ -708,7 +812,7 @@ impl NextArtView {
                         if let Some(handle) = rom_image {
                             Element::from(image(handle))
                         } else {
-                            text("Loading image...").into()
+                            text(strings::LABEL_LOADING_IMAGE).into()
                         },
                         row![
                             button(strings::LABEL_COPY_PATH).on_press(Message::SetClipboardText(
@@ -744,7 +848,8 @@ impl NextArtView {
             async move {
                 let file = File::open(&image_path).map_err(|e| {
                     format!(
-                        "Failed to open image file '{}': {}",
+                        "{}{}': {}",
+                        strings::ERROR_PREFIX_OPEN_IMAGE_FILE,
                         image_path.display(),
                         e
                     )
@@ -754,14 +859,20 @@ impl NextArtView {
                     .with_guessed_format()
                     .map_err(|e| {
                         format!(
-                            "Failed to guess format for '{}': {}",
+                            "{}{}': {}",
+                            strings::ERROR_PREFIX_GUESS_FORMAT,
                             image_path.display(),
                             e
                         )
                     })?
                     .decode()
                     .map_err(|e| {
-                        format!("Failed to decode image '{}': {}", image_path.display(), e)
+                        format!(
+                            "{}{}': {}",
+                            strings::ERROR_PREFIX_DECODE_IMAGE,
+                            image_path.display(),
+                            e
+                        )
                     })?;
 
                 Ok((img.width(), img.height(), img.to_rgba8().to_vec()))
