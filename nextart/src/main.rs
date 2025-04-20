@@ -1,6 +1,6 @@
 use std::{
     fs::{DirEntry, File},
-    io::{BufRead, BufReader, Bytes, Read},
+    io::BufReader,
     path::PathBuf,
 };
 
