@@ -733,7 +733,9 @@ impl NextArtView {
                 {
                     *selected_index = Some(index);
 
-                    return Self::load_image_task(state.index.roms[index].boxart_path.clone());
+                    if state.index.roms[index].boxart_size != 0 {
+                        return Self::load_image_task(state.index.roms[index].boxart_path.clone());
+                    }
                 }
             }
 
