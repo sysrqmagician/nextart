@@ -13,6 +13,7 @@ pub const ERROR_PREFIX_CONFIG_DIR_CREATE: &str =
 pub const ERROR_PREFIX_CONFIG_FILE_CREATE: &str =
     "Failed to create config file. Roms path will not be pre-filled on restart";
 pub const ERROR_PREFIX_CONFIG_FILE_READ: &str = "Failed to read config file";
+pub const ERROR_PREFIX_DELETE_FILE: &str = "Failed to delete file '";
 pub const ERROR_PREFIX_COPY_FILE: &str = "Failed to copy file from '";
 pub const ERROR_PREFIX_DECODE_IMAGE: &str = "Failed to decode image '";
 pub const ERROR_PREFIX_DIR_ENTRY: &str = "Failed to read directory entry: ";
@@ -44,6 +45,7 @@ pub const LABEL_NO_IMAGE: &str = "No image";
 pub const LABEL_NO_ROM_SELECTED: &str = "No ROM selected";
 pub const LABEL_OPEN: &str = "Open";
 pub const LABEL_PASTE_IMAGE: &str = "Paste Image";
+pub const LABEL_DELETE: &str = "Delete";
 pub const LABEL_PICK: &str = "Pick";
 pub const LABEL_RESTART: &str = "Restart";
 pub const LABEL_ROMS: &str = "Roms";

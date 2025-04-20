@@ -76,6 +76,7 @@ enum Message {
     WroteNewImage(usize, u64),
     ChooseReplacementImage(PathBuf, usize),
     ResetState,
+    DeleteBoxart(PathBuf, usize),
 }
 
 #[derive(Debug, Clone)]
@@ -643,8 +644,31 @@ impl NextArtView {
                     state.index.roms[rom_index].boxart_size = size;
                     *selected_image = None;
 
-                    return Self::load_image_task(state.index.roms[rom_index].boxart_path.clone());
+                    if size != 0 {
+                        return Self::load_image_task(
+                            state.index.roms[rom_index].boxart_path.clone(),
+                        );
+                    }
                 }
+            }
+
+            Message::DeleteBoxart(boxart_path, rom_index) => {
+                return Task::perform(
+                    async move {
+                        match std::fs::remove_file(&boxart_path) {
+                            Ok(()) => Ok(rom_index),
+                            Err(e) => Err(format!(
+                                "{}{}: {e}",
+                                strings::ERROR_PREFIX_DELETE_FILE,
+                                boxart_path.display()
+                            )),
+                        }
+                    },
+                    |result| match result {
+                        Ok(index) => Message::WroteNewImage(index, 0),
+                        Err(e) => Message::RecordError(e),
+                    },
+                );
             }
 
             Message::ResetState => {
@@ -894,6 +918,21 @@ impl NextArtView {
                                     rom_index
                                 )
                             ),
+                            button(strings::LABEL_DELETE)
+                                .on_press(Message::DeleteBoxart(rom.boxart_path.clone(), rom_index))
+                                .style(|theme: &iced::Theme, status| button::Style {
+                                    background: if let button::Status::Hovered = status {
+                                        Some(iced::Background::Color(
+                                            theme.extended_palette().danger.strong.color,
+                                        ))
+                                    } else {
+                                        Some(iced::Background::Color(
+                                            theme.extended_palette().danger.base.color,
+                                        ))
+                                    },
+                                    text_color: theme.palette().text,
+                                    ..Default::default()
+                                }),
                         ]
                         .spacing(5)
                     ]
