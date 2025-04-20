@@ -1,4 +1,8 @@
-use std::{fs::DirEntry, path::PathBuf};
+use std::{
+    fs::{DirEntry, File},
+    io::{BufRead, BufReader, Bytes, Read},
+    path::PathBuf,
+};
 
 use ::image::{EncodableLayout, ImageReader, RgbaImage};
 use arboard::{Clipboard, ImageData};
@@ -61,7 +65,8 @@ enum Message {
     ReplacementImageFromClip(PathBuf, usize),
     ViewError(String),
     RecordError(String),
-    NewImageSize(usize, u64),
+    SetRomInfoImage(u32, u32, Vec<u8>),
+    WroteNewImage(usize, u64),
     ChooseReplacementImage(PathBuf, usize),
     ResetState,
 }
@@ -169,6 +174,7 @@ enum NextArtView {
         state: State,
         title: String,
         selected_index: Option<usize>,
+        selected_image: Option<image::Handle>,
         rom_indices: Vec<usize>,
     },
     FatalError {
@@ -296,6 +302,7 @@ impl NextArtView {
                 state,
                 title,
                 selected_index,
+                selected_image,
                 rom_indices,
             } => {
                 let mut rom_indice_tuples: Vec<(usize, &Rom)> = rom_indices
@@ -359,6 +366,7 @@ impl NextArtView {
                                     "This should not be reachable! selected_index did not exist!",
                                 ),
                                 *selected_index,
+                                selected_image,
                             )
                         } else {
                             column![
@@ -423,6 +431,12 @@ impl NextArtView {
         match message {
             Message::NoOp => {}
 
+            Message::SetRomInfoImage(width, height, byte_vec) => {
+                if let NextArtView::RomList { selected_image, .. } = self {
+                    *selected_image = Some(image::Handle::from_rgba(width, height, byte_vec));
+                }
+            }
+
             Message::OpenCollectionList => match std::mem::replace(self, NextArtView::default()) {
                 NextArtView::RomList { state, .. } | NextArtView::ErrorList { state } => {
                     *self = NextArtView::CollectionList { state };
@@ -469,7 +483,7 @@ impl NextArtView {
                             .map(|m| m.len())
                     },
                     move |result| match result {
-                        Ok(size) => Message::NewImageSize(rom_index, size),
+                        Ok(size) => Message::WroteNewImage(rom_index, size),
                         Err(e) => Message::RecordError(e),
                     },
                 );
@@ -502,9 +516,17 @@ impl NextArtView {
                 );
             }
 
-            Message::NewImageSize(rom_index, size) => {
-                if let NextArtView::RomList { state, .. } = self {
+            Message::WroteNewImage(rom_index, size) => {
+                if let NextArtView::RomList {
+                    state,
+                    selected_image,
+                    ..
+                } = self
+                {
                     state.index.roms[rom_index].boxart_size = size;
+                    *selected_image = None;
+
+                    return Self::load_image_task(state.index.roms[rom_index].boxart_path.clone());
                 }
             }
 
@@ -519,6 +541,7 @@ impl NextArtView {
                             state,
                             title,
                             selected_index: None,
+                            selected_image: None,
                             rom_indices,
                         };
                     }
@@ -569,7 +592,7 @@ impl NextArtView {
                         }
                     },
                     move |x| match x {
-                        Ok(x) => Message::NewImageSize(rom_index, x),
+                        Ok(x) => Message::WroteNewImage(rom_index, x),
                         Err(e) => Message::RecordError(e.to_string()),
                     },
                 );
@@ -598,8 +621,15 @@ impl NextArtView {
             }
 
             Message::SelectRom(index) => {
-                if let NextArtView::RomList { selected_index, .. } = self {
+                if let NextArtView::RomList {
+                    selected_index,
+                    state,
+                    ..
+                } = self
+                {
                     *selected_index = Some(index);
+
+                    return Self::load_image_task(state.index.roms[index].boxart_path.clone());
                 }
             }
 
@@ -635,7 +665,11 @@ impl NextArtView {
         Task::none()
     }
 
-    fn rom_info_column(rom: &Rom, rom_index: usize) -> Element<Message> {
+    fn rom_info_column<'a>(
+        rom: &'a Rom,
+        rom_index: usize,
+        rom_image: &'a Option<image::Handle>,
+    ) -> Element<'a, Message> {
         scrollable(
             column![
                 text(&rom.name)
@@ -671,7 +705,11 @@ impl NextArtView {
                     .spacing(10)
                 } else {
                     column![
-                        image(&rom.boxart_path),
+                        if let Some(handle) = rom_image {
+                            Element::from(image(handle))
+                        } else {
+                            text("Loading image...").into()
+                        },
                         row![
                             button(strings::LABEL_COPY_PATH).on_press(Message::SetClipboardText(
                                 rom.boxart_path.to_string_lossy().into()
@@ -699,6 +737,40 @@ impl NextArtView {
             .width(Length::Fill),
         )
         .into()
+    }
+
+    fn load_image_task(image_path: PathBuf) -> Task<Message> {
+        Task::perform(
+            async move {
+                let file = File::open(&image_path).map_err(|e| {
+                    format!(
+                        "Failed to open image file '{}': {}",
+                        image_path.display(),
+                        e
+                    )
+                })?;
+
+                let img = ImageReader::new(BufReader::new(file))
+                    .with_guessed_format()
+                    .map_err(|e| {
+                        format!(
+                            "Failed to guess format for '{}': {}",
+                            image_path.display(),
+                            e
+                        )
+                    })?
+                    .decode()
+                    .map_err(|e| {
+                        format!("Failed to decode image '{}': {}", image_path.display(), e)
+                    })?;
+
+                Ok((img.width(), img.height(), img.to_rgba8().to_vec()))
+            },
+            |result: Result<(u32, u32, Vec<u8>), String>| match result {
+                Ok((width, height, bytes)) => Message::SetRomInfoImage(width, height, bytes),
+                Err(e) => Message::RecordError(e),
+            },
+        )
     }
 }
 
