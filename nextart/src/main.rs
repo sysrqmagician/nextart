@@ -7,6 +7,7 @@ use std::{
 use ::image::{EncodableLayout, ImageReader, RgbaImage};
 use arboard::{Clipboard, ImageData};
 use bittenhumans::ByteSizeFormatter;
+use directories::ProjectDirs;
 use iced::{
     Alignment, Element, Font, Length, Task,
     alignment::Horizontal,
@@ -15,6 +16,7 @@ use iced::{
     widget::{Space, button, column, image, row, scrollable, text, text_input},
 };
 use rfd::FileDialog;
+use serde::{Deserialize, Serialize};
 
 mod strings;
 
@@ -41,6 +43,11 @@ struct Rom {
     name: String,
     boxart_path: PathBuf,
     boxart_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistentConfig {
+    roms_path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -232,6 +239,7 @@ impl State {
 enum NextArtView {
     Setup {
         chosen_path: Option<PathBuf>,
+        error: Option<String>,
     },
     Loading {
         state: State,
@@ -257,14 +265,17 @@ enum NextArtView {
 
 impl Default for NextArtView {
     fn default() -> Self {
-        Self::Setup { chosen_path: None }
+        Self::Setup {
+            chosen_path: None,
+            error: None,
+        }
     }
 }
 
 impl NextArtView {
     pub fn view(&self) -> Element<Message> {
         match self {
-            Self::Setup { chosen_path } => column![
+            Self::Setup { chosen_path, error } => column![
                 text(strings::UI_TITLE_SETUP).font(Font {
                     weight: Weight::Bold,
                     ..Default::default()
@@ -292,7 +303,12 @@ impl NextArtView {
                         } else {
                             Message::ViewError(strings::ERROR_NO_PATH.into())
                         })
-                ]
+                ],
+                if let Some(error) = error {
+                    text(error)
+                } else {
+                    text("")
+                }
             ]
             .spacing(SPACING_STANDARD)
             .padding(PADDING_STANDARD)
@@ -547,7 +563,7 @@ impl NextArtView {
                             image.height as u32,
                             image.bytes.to_vec(),
                         )
-                        .ok_or_else(|| strings::ERROR_FAILED_CREATE_IMAGE)?;
+                        .ok_or_else(|| strings::ERROR_FAILED_CLIPBOARD_IMAGE_OTHER)?;
                         rgba_image
                             .save_with_format(&boxart_path, ::image::ImageFormat::Png)
                             .map_err(|e| {
@@ -632,7 +648,10 @@ impl NextArtView {
             }
 
             Message::ResetState => {
-                *self = NextArtView::Setup { chosen_path: None };
+                *self = NextArtView::Setup {
+                    chosen_path: None,
+                    error: None,
+                };
             }
 
             Message::OpenRomList(title, rom_indices) => {
@@ -719,7 +738,7 @@ impl NextArtView {
             }
 
             Message::RomDirectoryChosen(path) => {
-                if let NextArtView::Setup { chosen_path } = self {
+                if let NextArtView::Setup { chosen_path, .. } = self {
                     *chosen_path = Some(path);
                 }
             }
@@ -748,17 +767,61 @@ impl NextArtView {
                     },
                     message: strings::UI_SETUP_INDEXING.into(),
                 };
-
                 if let Self::Loading { state, .. } = self {
                     let mut state = state.clone();
                     return Task::perform(
                         async move {
+                            if let Some(dirs) =
+                                ProjectDirs::from("", strings::DIR_ORG, strings::DIR_APP)
+                            {
+                                let config_dir = dirs.config_dir();
+
+                                if let Err(e) = std::fs::create_dir_all(config_dir) {
+                                    state.errors.push(format!(
+                                        "{}: {}",
+                                        strings::ERROR_PREFIX_CONFIG_DIR_CREATE,
+                                        e
+                                    ));
+                                } else {
+                                    let config = PersistentConfig {
+                                        roms_path: state.roms_folder.clone(),
+                                    };
+
+                                    let config_path = config_dir.join("config.json");
+
+                                    if let Err(e) = serde_json::to_string(&config)
+                                        .map_err(|e| {
+                                            format!(
+                                                "{}: {}",
+                                                strings::ERROR_PREFIX_CONFIG_FILE_CREATE,
+                                                e
+                                            )
+                                        })
+                                        .and_then(|serialized| {
+                                            std::fs::write(&config_path, serialized).map_err(|e| {
+                                                format!(
+                                                    "{}: {}",
+                                                    strings::ERROR_PREFIX_CONFIG_FILE_CREATE,
+                                                    e
+                                                )
+                                            })
+                                        })
+                                    {
+                                        state.errors.push(e);
+                                    }
+                                }
+                            } else {
+                                state.errors.push(strings::ERROR_NO_HOME_DIRECTORY.into());
+                            }
+
+                            // Index ROMs
                             if let Err(e) = state.index_roms() {
                                 state.errors.push(e.to_string());
                             }
+
                             state
                         },
-                        |new_state| Message::CompletedIndexing(new_state),
+                        Message::CompletedIndexing,
                     );
                 }
             }
@@ -890,6 +953,61 @@ impl NextArtView {
 #[tokio::main]
 async fn main() {
     iced::application("NextArt", NextArtView::update, NextArtView::view)
-        .run()
+        .run_with(
+            || match ProjectDirs::from("", strings::DIR_ORG, strings::DIR_APP) {
+                Some(dirs) => {
+                    let mut config_file = dirs.config_dir().to_path_buf();
+                    config_file.push("config.json");
+
+                    match std::fs::read_to_string(&config_file) {
+                        Ok(content) => match serde_json::from_str::<PersistentConfig>(&content) {
+                            Ok(config) => (
+                                NextArtView::Setup {
+                                    chosen_path: Some(config.roms_path),
+                                    error: None,
+                                },
+                                Task::none(),
+                            ),
+                            Err(e) => (
+                                NextArtView::Setup {
+                                    chosen_path: None,
+                                    error: Some(format!(
+                                        "{}: {}",
+                                        strings::ERROR_PREFIX_CONFIG_FILE_READ,
+                                        e
+                                    )),
+                                },
+                                Task::none(),
+                            ),
+                        },
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
+                            NextArtView::Setup {
+                                chosen_path: None,
+                                error: None,
+                            },
+                            Task::none(),
+                        ),
+                        Err(e) => (
+                            NextArtView::Setup {
+                                chosen_path: None,
+                                error: Some(format!(
+                                    "{}: {}",
+                                    strings::ERROR_PREFIX_CONFIG_FILE_READ,
+                                    e
+                                )),
+                            },
+                            Task::none(),
+                        ),
+                    }
+                }
+                None => (
+                    NextArtView::Setup {
+                        chosen_path: None,
+                        error: Some(strings::ERROR_NO_HOME_DIRECTORY.into()),
+                    },
+                    Task::none(),
+                ),
+            },
+        )
         .expect("Error while running GUI");
 }
