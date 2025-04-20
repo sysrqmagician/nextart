@@ -1,8 +1,7 @@
 # NextArt
+<img src="https://github.com/sysrqmagician/nextart/blob/main/assets/nextart-showcase.png?raw=true" width=50% height=50%>
 
-![NextArt Screenshot](assets/nextart-showcase.png)
-
-NextArt is a desktop application for managing box art images for your ROM collections. It provides an easy way to view, add, replace, and organize artwork for your game libraries.
+NextArt is a desktop application for managing the box art of [NextUI](https://github.com/loveretro/nextui) ROM collections.
 
 [![Crates.io](https://img.shields.io/crates/v/nextart)](https://crates.io/crates/nextart)
 [![License](https://img.shields.io/github/license/sysrqmagician/nextart)](https://github.com/sysrqmagician/nextart/blob/main/LICENSE)
@@ -10,6 +9,7 @@ NextArt is a desktop application for managing box art images for your ROM collec
 
 
 ## Features
+https://github.com/user-attachments/assets/51ac4183-d5a0-404a-b7c5-24a85749aad4
 
 - **Box Art Management**: View, add, replace, copy, and delete box art for each ROM
 - **Clipboard Integration**: Easily copy/paste box art images directly from the clipboard
@@ -23,7 +23,7 @@ cargo install nextart
 
 
 ### Download pre-built binaries
-Download the latest binary for your system [here](https://github.com/sysrqmagician/nextart/releases/latest)
+Download the latest binary for your system [here](https://github.com/sysrqmagician/nextart/releases/latest).
 
 
 ## Directory Structure
