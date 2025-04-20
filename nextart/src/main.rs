@@ -463,14 +463,14 @@ impl NextArtView {
                         .align_x(Alignment::Center)
                 ]
                 .spacing(10),
-                column(state.errors.iter().map(|x| {
+                scrollable(column(state.errors.iter().map(|x| {
                     row![
                         button(strings::LABEL_COPY).on_press(Message::SetClipboardText(x.clone())),
                         text(x)
                     ]
                     .spacing(10)
                     .into()
-                }))
+                })))
             ]
             .spacing(20)
             .padding(30)
