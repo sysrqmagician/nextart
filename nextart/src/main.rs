@@ -102,7 +102,7 @@ impl State {
                 let entry_path = entry.path();
                 match entry.file_type() {
                     Ok(file_type) => {
-                        if file_type.is_dir() {
+                        if file_type.is_dir() && !entry.path().ends_with(".media") {
                             if let Err(e) = self.index_collection_folder(entry) {
                                 self.errors.push(format!(
                                     "{}{}': {}",
